@@ -100,7 +100,7 @@ class DockerHelper(object):
 
     def execute_cli_command(self, project_shortname, command):
         """Execute an invenio CLI command in the API container."""
-        container_name = "{}_web-ui_1".format(self.container_prefix)
+        container_name = "{}-web-ui-1".format(self.container_prefix)
         container = self.docker_client.containers.get(container_name)
         status = container.exec_run(
             cmd='/bin/bash -c "{}"'.format(command.replace('"', '\\"')),
