@@ -3,6 +3,8 @@
 # This file is part of Invenio.
 # Copyright (C) 2019 CERN.
 # Copyright (C) 2019 Northwestern University.
+# Copyright (C) 2023 ULB Münster.
+# Copyright (C) 2024 Graz University of Technology.
 #
 # Invenio is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
@@ -23,7 +25,8 @@ class DockerHelper(object):
 
     def __init__(self, project_shortname, local=True, log_config=None):
         """Constructor."""
-        super(DockerHelper, self).__init__()
+        super().__init__()
+        self.docker_compose = ["docker", "compose"]
         self.container_prefix = self._normalize_name(project_shortname)
         self.local = local
         self.docker_client = docker.from_env()
@@ -34,7 +37,7 @@ class DockerHelper(object):
         Docker-Compose introduced support for dash and underscore in
         version 1.21.0.
         """
-        dc_version_string = run_cmd(["docker-compose", "--version"])
+        dc_version_string = run_cmd(self.docker_compose + ["version"])
         groups = re.search(r"[0-9].[0-9]*.[0-9]*", dc_version_string.output)
         dc_version = groups.group(0)
 
@@ -43,14 +46,28 @@ class DockerHelper(object):
         else:
             return project_shortname
 
+    def _get_container_from_service(self, service_name):
+        """Retrieve the docker container for the given service_name."""
+        container_name = [
+            container.name
+            for container in self.docker_client.containers.list()
+            if container.name.startswith(self.container_prefix)
+            and service_name in container.name
+        ]
+
+        return (
+            self.docker_client.containers.get(container_name[0])
+            if container_name
+            else None
+        )
+
     def build_images(self, pull=False, cache=True):
         """Build images.
 
         :param pull: Adds --pull to the docker-compose command.
         :param cache: Removes --no-cache to the docker-compose command.
         """
-        command = [
-            "docker-compose",
+        command = self.docker_compose + [
             "--file",
             "docker-compose.full.yml",
             "build",
@@ -68,8 +85,7 @@ class DockerHelper(object):
 
         :param app_only: Boot up only ui and api containers.
         """
-        command = [
-            "docker-compose",
+        command = self.docker_compose + [
             "--file",
             "docker-compose.yml" if self.local else "docker-compose.full.yml",
             "up",
@@ -83,15 +99,18 @@ class DockerHelper(object):
 
     def stop_containers(self):
         """Stop currently running containers."""
-        command = ["docker-compose", "--file", "docker-compose.full.yml", "stop"]
+        command = self.docker_compose + [
+            "--file",
+            "docker-compose.yml" if self.local else "docker-compose.full.yml",
+            "stop",
+        ]
         return run_cmd(command)
 
     def destroy_containers(self):
         """Stop and remove all containers, volumes and images."""
-        command = [
-            "docker-compose",
+        command = self.docker_compose + [
             "--file",
-            "docker-compose.full.yml",
+            "docker-compose.yml" if self.local else "docker-compose.full.yml",
             "down",
             "--volumes",
         ]
@@ -100,15 +119,21 @@ class DockerHelper(object):
 
     def execute_cli_command(self, project_shortname, command):
         """Execute an invenio CLI command in the API container."""
-        container_name = "{}-web-ui-1".format(self.container_prefix)
-        container = self.docker_client.containers.get(container_name)
-        status = container.exec_run(
-            cmd='/bin/bash -c "{}"'.format(command.replace('"', '\\"')),
-            tty=True,
-            stdout=True,
-            stderr=True,
-        )
-        # FIXME: What happens when exec_run fails? handle exception.
-        return ProcessResponse(
-            output=status.output.decode("utf-8").strip(), status_code=status.exit_code
-        )
+        container = self._get_container_from_service("web-ui")
+        if container:
+            status = container.exec_run(
+                cmd='/bin/bash -c "{}"'.format(command.replace('"', '\\"')),
+                tty=True,
+                stdout=True,
+                stderr=True,
+            )
+            # FIXME: What happens when exec_run fails? handle exception.
+            return ProcessResponse(
+                output=status.output.decode("utf-8").strip(),
+                status_code=status.exit_code,
+            )
+        else:
+            return ProcessResponse(
+                output="Web UI container not found. Is it up and running?",
+                status_code=1,
+            )

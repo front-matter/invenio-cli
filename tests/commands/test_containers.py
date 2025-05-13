@@ -16,15 +16,13 @@ import pytest
 from invenio_cli.commands import ContainersCommands
 
 
-@pytest.mark.skip()
 @pytest.fixture(scope="function")
 def expected_setup_calls():
     return [
         call("project-shortname", "invenio db init create"),
         call(
             "project-shortname",
-            "invenio files location create --default default-location "
-            "${INVENIO_INSTANCE_PATH}/data",
+            "invenio files location create --default default-location ${INVENIO_INSTANCE_PATH}/data",  # noqa
         ),
         call("project-shortname", "invenio roles create admin"),
         call("project-shortname", "invenio access allow superuser-access role admin"),
@@ -32,19 +30,17 @@ def expected_setup_calls():
         # update_statics_and_assets call
         call("project-shortname", "invenio collect"),
         call("project-shortname", "invenio webpack create"),
-        call("project-shortname", "invenio webpack install --unsafe"),
+        call("project-shortname", "invenio webpack install"),
         call("project-shortname", "invenio webpack build"),
     ]
 
 
-@pytest.mark.skip()
 @pytest.fixture(scope="function")
 def expected_force_calls():
     return [
         call(
             "project-shortname",
-            "invenio shell --no-term-title -c "
-            "\"import redis; redis.StrictRedis.from_url(app.config['CACHE_REDIS_URL']).flushall(); print('Cache cleared')\"",  # noqa
+            "invenio shell --no-term-title -c \"import redis; redis.StrictRedis.from_url(app.config['CACHE_REDIS_URL']).flushall(); print('Cache cleared')\"",  # noqa
         ),
         call("project-shortname", "invenio db destroy --yes-i-know"),
         call("project-shortname", "invenio index destroy --force --yes-i-know"),
@@ -88,7 +84,7 @@ def test_containerize_no_install(
     commands.containerize(pre=False, force=False, install=False)
 
     assert (
-        call("project-shortname", "invenio webpack install --unsafe")
+        call("project-shortname", "invenio webpack install")
         not in commands.docker_helper.execute_cli_command.mock_calls
     )
 
@@ -156,7 +152,7 @@ def test_update_statics_and_assets(p_docker_helper, p_run_cmd, mock_cli_config):
     expected_execute_cli_calls = [
         call("project-shortname", "invenio collect"),
         call("project-shortname", "invenio webpack create"),
-        call("project-shortname", "invenio webpack install --unsafe"),
+        call("project-shortname", "invenio webpack install"),
         call("project-shortname", "invenio webpack build"),
     ]
     assert (

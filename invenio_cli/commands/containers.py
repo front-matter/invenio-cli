@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 CERN.
+# Copyright (C) 2025 Graz University of Technology.
 #
 # Invenio-Cli is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
@@ -8,10 +9,11 @@
 """Invenio module to ease the creation and management of applications."""
 
 from ..helpers.docker_helper import DockerHelper
+from ..helpers.versions import rdm_version
 from .packages import PackagesCommands
 from .services import ServicesCommands
-from .services_health import HEALTHCHECKS
 from .steps import FunctionStep
+from .translations import TranslationsCommands
 
 
 class ContainersCommands(ServicesCommands):
@@ -23,7 +25,7 @@ class ContainersCommands(ServicesCommands):
             cli_config.get_project_shortname(), local=False
         )
 
-        super(ContainersCommands, self).__init__(cli_config, docker_helper)
+        super().__init__(cli_config, docker_helper)
 
     def build(self, pull=True, cache=True):
         """Return the steps to build images.
@@ -33,7 +35,7 @@ class ContainersCommands(ServicesCommands):
         """
         steps = [
             FunctionStep(
-                func=PackagesCommands.is_locked,
+                func=lambda: PackagesCommands(self.cli_config).is_locked(),
                 message="Checking if dependencies are locked.",
             ),
             FunctionStep(
@@ -52,8 +54,7 @@ class ContainersCommands(ServicesCommands):
                 func=self.docker_helper.execute_cli_command,
                 args={
                     "project_shortname": project_shortname,
-                    "command": "invenio shell --no-term-title -c "
-                    "\"import redis; redis.StrictRedis.from_url(app.config['CACHE_REDIS_URL']).flushall(); print('Cache cleared')\"",  # noqa
+                    "command": "invenio shell --no-term-title -c \"import redis; redis.StrictRedis.from_url(app.config['CACHE_REDIS_URL']).flushall(); print('Cache cleared')\"",  # noqa
                 },
                 message="Flushing redis cache...",
             ),
@@ -105,9 +106,7 @@ class ContainersCommands(ServicesCommands):
                 func=self.docker_helper.execute_cli_command,
                 args={
                     "project_shortname": project_shortname,
-                    "command": "invenio files location create --default "
-                    "default-location "
-                    "${INVENIO_INSTANCE_PATH}/data",
+                    "command": "invenio files location create --default default-location ${INVENIO_INSTANCE_PATH}/data",  # noqa
                 },
                 message="Creating files location...",
             ),
@@ -123,7 +122,7 @@ class ContainersCommands(ServicesCommands):
                 func=self.docker_helper.execute_cli_command,
                 args={
                     "project_shortname": project_shortname,
-                    "command": "invenio access allow " "superuser-access role admin",
+                    "command": "invenio access allow superuser-access role admin",
                 },
                 message="Assigning superuser access to admin role...",
             ),
@@ -142,6 +141,35 @@ class ContainersCommands(ServicesCommands):
             ),
         ]
 
+        if rdm_version()[0] >= 10:
+            steps.extend(
+                [
+                    FunctionStep(
+                        func=self.docker_helper.execute_cli_command,
+                        args={
+                            "project_shortname": project_shortname,
+                            "command": "invenio rdm-records custom-fields init",
+                        },
+                        message="Creating custom fields for records...",
+                    ),
+                    FunctionStep(
+                        func=self.docker_helper.execute_cli_command,
+                        args={
+                            "project_shortname": project_shortname,
+                            "command": "invenio communities custom-fields init",
+                        },
+                        message="Creating custom fields for communities...",
+                    ),
+                ]
+            )
+
+        if rdm_version()[0] >= 11:
+            steps.extend(self.rdm_fixtures(project_shortname))
+            steps.extend(self.translations(project_shortname))
+
+        if rdm_version()[0] >= 12:
+            steps.extend(self.declare_queues(project_shortname))
+
         return steps
 
     def demo(self, project_shortname):
@@ -159,6 +187,20 @@ class ContainersCommands(ServicesCommands):
 
         return steps
 
+    def declare_queues(self, project_shortname):
+        """Steps to declare the MQ queues required for statistics, etc."""
+        steps = [
+            FunctionStep(
+                func=self.docker_helper.execute_cli_command,
+                args={
+                    "project_shortname": project_shortname,
+                    "command": "invenio queues declare",
+                },
+                message="Declaring queues...",
+            )
+        ]
+        return steps
+
     def fixtures(self, project_shortname):
         """Steps to set up the required fixtures for the instance."""
         steps = [
@@ -168,11 +210,55 @@ class ContainersCommands(ServicesCommands):
                     "project_shortname": project_shortname,
                     "command": "invenio rdm-records fixtures",
                 },
-                message="Creating fixtures...",
+                message="Creating records fixtures...",
             )
         ]
 
         return steps
+
+    def rdm_fixtures(self, project_shortname):
+        """Steps to set up the rdm fixtures for the instance."""
+        steps = [
+            FunctionStep(
+                func=self.docker_helper.execute_cli_command,
+                args={
+                    "project_shortname": project_shortname,
+                    "command": "invenio rdm fixtures",
+                },
+                message="Creating rdm fixtures...",
+            )
+        ]
+
+        return steps
+
+    def translations(self, project_shortname):
+        """Steps to compile translations for the instance."""
+        commands = TranslationsCommands(
+            self.cli_config,
+            project_path=self.cli_config.get_project_dir(),
+            # we use INVENIO_INSTANCE_PATH that is set in the Dockerfile as
+            # config.instance_path is set only in development `install` command
+            instance_path="${INVENIO_INSTANCE_PATH}",
+        )
+        cmd = commands.compile(
+            # instance path inside the container
+            directory="${INVENIO_INSTANCE_PATH}/translations",
+            symlink=False,
+        )
+        cmd = cmd[0].cmd  # extract compilation command
+        cmd = " ".join(cmd)  # convert to string
+
+        return [
+            FunctionStep(
+                func=self.docker_helper.execute_cli_command,
+                args={
+                    "project_shortname": project_shortname,
+                    "command": cmd,
+                },
+                message="Compiling message catalog...",
+                skippable=True,
+            ),
+        ]
 
     def setup(self, force, demo_data=True, stop=False, services=True):
         """Return the steps to setup containerize services.
@@ -228,7 +314,7 @@ class ContainersCommands(ServicesCommands):
 
         if lock:
             # FIXME: Should this params be accepted? sensible defaults?
-            steps.extend(PackagesCommands.lock(pre=True, dev=True))
+            steps.extend(PackagesCommands(self.cli_config).lock(pre=True, dev=True))
 
         if build:
             steps.extend(self.build())

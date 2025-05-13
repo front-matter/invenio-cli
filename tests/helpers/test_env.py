@@ -15,13 +15,13 @@ from invenio_cli.helpers.env import env
 
 def test_env():
     """Test environment variables context manager."""
-    assert "FLASK_ENV" not in os.environ
+    assert "SERVER_NAME" not in os.environ
     assert "FLASK_DEBUG" not in os.environ
 
-    os.environ["FLASK_DEBUG"] = "true"
-    with env(FLASK_ENV="production", FLASK_DEBUG="false"):
-        assert os.environ["FLASK_ENV"] == "production"
-        assert os.environ["FLASK_DEBUG"] == "false"
+    os.environ["FLASK_DEBUG"] = "1"
+    with env(SERVER_NAME="example.com", FLASK_DEBUG="0"):
+        assert os.environ["SERVER_NAME"] == "example.com"
+        assert os.environ["FLASK_DEBUG"] == "0"
 
-    assert os.environ["FLASK_DEBUG"] == "true"
-    assert "FLASK_ENV" not in os.environ
+    assert os.environ["FLASK_DEBUG"] == "1"
+    assert "SERVER_NAME" not in os.environ

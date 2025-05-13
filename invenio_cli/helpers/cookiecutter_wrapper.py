@@ -36,7 +36,7 @@ class CookiecutterWrapper(object):
     def __init__(self, flavour, **kwargs):
         """Constructor.
 
-        :param flavour: "RDM" or something else: String
+        :param flavour: "RDM", "ILS" or something else: String
 
         :Keyword Arguments:
           * template: URL
@@ -66,7 +66,15 @@ class CookiecutterWrapper(object):
                 or "https://github.com/inveniosoftware/cookiecutter-invenio-rdm.git"
             )
             self.template_name = self.extract_template_name(self.template)
-            self.checkout = self.checkout or "v10.0"
+            self.checkout = self.checkout or "v12.0"
+
+        if self.flavour.upper() == "ILS":
+            self.template = (
+                self.template_name
+                or "https://github.com/inveniosoftware/cookiecutter-invenio-ils.git"
+            )
+            self.template_name = self.extract_template_name(self.template)
+            self.checkout = self.checkout or "v1.0.0rc.1"
 
     def cookiecutter(self):
         """Wrap cookiecutter call."""

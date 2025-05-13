@@ -22,7 +22,7 @@ class ProcessResponse:
     def __init__(self, output=None, error=None, status_code=0, warning=False):
         """Constructor.
 
-        By default it is a successful response (0) wiht no error nor ouput.
+        By default, it is a successful response (0) with no error nor output.
         """
         self.output = output
         self.error = error
@@ -54,7 +54,7 @@ def run_interactive(command, env=None, skippable=False, log_file=None):
 
     try:
         stdout = open(log_file, "a") if log_file else None
-        response = run(command, check=True, env=full_env, stdout=stdout, stderr=stdout)
+        _ = run(command, check=True, env=full_env, stdout=stdout, stderr=stdout)
         return ProcessResponse(output=None, error=None, status_code=0)
     except CalledProcessError as e:
         if skippable:

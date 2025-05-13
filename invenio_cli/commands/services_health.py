@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 CERN.
+# Copyright (C) 2023 ULB Münster.
+# Copyright (C) 2024 Graz University of Technology.
 #
 # Invenio-Cli is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
@@ -18,8 +20,6 @@
 
 import time
 
-import click
-
 from ..helpers.process import run_cmd
 
 
@@ -29,27 +29,27 @@ class ServicesHealthCommands(object):
     @classmethod
     def search_healthcheck(cls, *args, **kwargs):
         """Open/Elasticsearch healthcheck."""
-        verbose = kwargs["verbose"]
-
+        host = kwargs["search_host"]
+        port = kwargs["search_port"]
         return run_cmd(
-            ["curl", "-f", "localhost:9200/_cluster/health?wait_for_status=yellow"]
+            ["curl", "-f", f"{host}:{port}/_cluster/health?wait_for_status=yellow"]
         )
 
     @classmethod
     def postgresql_healthcheck(cls, *args, **kwargs):
         """Postgresql healthcheck."""
         filepath = kwargs["filepath"]
-        verbose = kwargs["verbose"]
 
         return run_cmd(
             [
-                "docker-compose",
+                "docker",
+                "compose",
                 "--file",
                 filepath,
                 "exec",
                 "-T",
                 "db",
-                "bash",
+                "sh",
                 "-c",
                 "pg_isready",
             ]
@@ -59,12 +59,12 @@ class ServicesHealthCommands(object):
     def mysql_healthcheck(cls, *args, **kwargs):
         """Mysql healthcheck."""
         filepath = kwargs["filepath"]
-        verbose = kwargs["verbose"]
         password = kwargs["project_shortname"]
 
         return run_cmd(
             [
-                "docker-compose",
+                "docker",
+                "compose",
                 "--file",
                 filepath,
                 "exec",
@@ -80,17 +80,17 @@ class ServicesHealthCommands(object):
     def redis_healthcheck(cls, *args, **kwargs):
         """Redis healthcheck."""
         filepath = kwargs["filepath"]
-        verbose = kwargs["verbose"]
 
         return run_cmd(
             [
-                "docker-compose",
+                "docker",
+                "compose",
                 "--file",
                 filepath,
                 "exec",
                 "-T",
                 "cache",
-                "bash",
+                "sh",
                 "-c",
                 "redis-cli ping",
                 "|",
@@ -100,62 +100,79 @@ class ServicesHealthCommands(object):
         )
 
     @classmethod
-    def wait_for_services(
+    def wait_for_service(
         cls,
-        services,
+        service,
         project_shortname,
+        print_func,
         filepath="docker-services.yml",
         max_retries=6,
         verbose=False,
+        search_host="localhost",
+        search_port="9200",
     ):
-        """Wait for services to be up.
+        """Wait for the given service to be up."""
+        if service not in HEALTHCHECKS:
+            raise RuntimeError(
+                f"{service} not recognized. Available services: {HEALTHCHECKS.keys()}"
+            )
 
-        It performs configured healthchecks in a serial fashion, following the
-        order given in the ``up`` command. If the services is an empty list,
-        to be compliant with `docker-compose` it will perform the healthchecks
-        of all the services.
-        """
-        if len(services) == 0:
-            services = HEALTHCHECKS.keys()
+        exp_backoff_time = 2
+        try_ = 0
+        check = HEALTHCHECKS[service]
+        check_func = check["func"]
+        initial_delay = check.get("initial_delay", 0)
+        wait_initial_delay = initial_delay > 0
+        ready = False
 
-        for service in services:
-            exp_backoff_time = 2
-            try_ = 1
-            check = HEALTHCHECKS[service]
-            ready = check(
+        while not ready and try_ < max_retries:
+            response = check_func(
                 filepath=filepath,
                 verbose=verbose,
                 project_shortname=project_shortname,
+                search_host=search_host,
+                search_port=search_port,
             )
-            while not ready and try_ < max_retries:
-                click.secho(
-                    f"{service} not ready at {try_} retries, waiting "
-                    + f"{exp_backoff_time}s",
-                    fg="yellow",
-                )
-                try_ += 1
-                time.sleep(exp_backoff_time)
-                exp_backoff_time *= 2
-                ready = (
-                    check(
-                        filepath=filepath,
-                        verbose=verbose,
-                        project_shortname=project_shortname,
-                    ).status_code
-                    == 0
-                )
+            ready = response.status_code == 0
 
             if not ready:
-                click.secho(f"Unable to boot up {service}", fg="red")
-                exit(1)
-            else:
-                click.secho(f"{service} up and running!", fg="green")
+                is_first_check = try_ == 0
+
+                # some services might be particularly slow to start up
+                if is_first_check and wait_initial_delay:
+                    print_func(
+                        f"{service} starting up, checking in {initial_delay}s...",
+                    )
+                    time.sleep(initial_delay)
+                else:
+                    print_func(
+                        f"{service} not ready at {try_+1} retries, waiting "
+                        + f"{exp_backoff_time}s...",
+                    )
+                    time.sleep(exp_backoff_time)
+                    exp_backoff_time *= 2
+
+                try_ += 1
+
+        return ready
 
 
 HEALTHCHECKS = {
-    "search": ServicesHealthCommands.search_healthcheck,
-    "postgresql": ServicesHealthCommands.postgresql_healthcheck,
-    "mysql": ServicesHealthCommands.mysql_healthcheck,
-    "redis": ServicesHealthCommands.redis_healthcheck,
+    "search": {
+        "func": ServicesHealthCommands.search_healthcheck,
+        "initial_delay": 15,  # search cluster can be particularly slow to start
+    },
+    "postgresql": {
+        "func": ServicesHealthCommands.postgresql_healthcheck,
+        "initial_delay": 0,
+    },
+    "mysql": {
+        "func": ServicesHealthCommands.mysql_healthcheck,
+        "initial_delay": 0,
+    },
+    "redis": {
+        "func": ServicesHealthCommands.redis_healthcheck,
+        "initial_delay": 0,
+    },
 }
 """Health check functions module path, as string."""

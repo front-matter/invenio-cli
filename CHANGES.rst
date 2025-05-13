@@ -1,12 +1,112 @@
 ..
-    Copyright (C) 2019-2021 CERN.
+    Copyright (C) 2019-2024 CERN.
     Copyright (C) 2019-2021 Northwestern University.
+    Copyright (C) 2025      TU Wien.
 
     Invenio-Cli is free software; you can redistribute it and/or modify
     it under the terms of the MIT License; see LICENSE file for more details.
 
 Changes
 =======
+
+Version 1.7.2 (released 2025-04-22)
+
+- setup: bump minimum version of `pipenv` to pull in the `packaging` dependency
+
+Version 1.7.1 (released 2025-03-31)
+
+- versions: fix accidental creation of a tuple from the version string
+
+Version 1.7.0 (released 2025-03-28)
+
+- build: allow use of either `npm` or `pnpm` as JS package manager (via `.invenio`)
+
+Version 1.6.1 (released 2025-03-27)
+
+- versions: consider `pyproject.toml` when checking `App-{RDM,ILS}` dependency versions
+
+Version 1.6.0 (released 2025-02-28)
+
+- packages: allow use of either `pipenv` or `uv` as python package manager
+- flask: replace `FLASK_ENV` with `FLASK_DEBUG`
+- celery: allow setting a log level
+- config: make host & port for both web and search configurable via `.invenio.private`
+- run: introduce more fine-granular "web" and "worker" sub-commands
+
+Version 1.5.0 (released 2024-08-01)
+
+- dependencies: update for invenio-app-rdm v12
+
+Version 1.4.0 (released 2024-07-12)
+
+- services: add support for InvneioILS setup
+
+Version 1.3.1 (released 2024-06-05)
+
+- config: fix missing "instance_path" usage
+
+Version 1.3.0 (released 2024-05-24)
+
+- deps: pin docker to >=7.1.0 due to bug on requests
+- services: add instance path to env on setup
+
+Version 1.2.0 (released 2023-10-02)
+
+- reload on invenio.cfg changes
+
+Version 1.1.0 (released 2023-07-24)
+
+- add compatibility for docker compose v2
+- consider command errors when using install command and fail
+
+Version 1.0.21 (released 2023-05-18)
+
+- deps: support docker < 7 for compatibility with urllib3 v2
+
+Version 1.0.20 (released 2023-03-134)
+
+- setup: add queues initialisation to steps
+
+Version 1.0.19 (released 2023-03-10)
+
+- global: remove fail message on warning (i.e. soft failures)
+
+Version 1.0.18 (released 2023-02-07)
+
+- containerize: fix translation commands instance path
+
+Version 1.0.17 (released 2023-01-30)
+
+- requirements: check node version depending on app-rdm version
+
+Version 1.0.16 (released 2023-01-30)
+
+- bump cookiecutter to v11.0
+
+Version 1.0.15 (released 2023-01-13)
+
+- Setup: fix empty translation folder failing
+
+Version 1.0.14 (released 2023-01-09)
+
+- Add app-rdm fixtures to setup
+
+Version 1.0.13 (released 2022-11-14)
+
+- Allow compilation command to fail in case of missing catalogs.
+
+Version 1.0.12 (released 2022-10-28)
+
+- Adds support for translations (i18n) management commands.
+
+Version 1.0.11 (released 2022-10-24)
+
+- Add support for InvenioILS
+
+Version 1.0.8 (released 2022-10-13)
+
+- Fix issue when checking for services to be up
+  and running correctly.
 
 Version 1.0.7 (released 2022-10-10)
 

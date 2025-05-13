@@ -159,9 +159,7 @@ def test_install(mock_cli_config):
     commands._update_instance_path.assert_called()
     expected_symlink_calls = [call("invenio.cfg"), call("templates"), call("app_data")]
     assert commands._symlink_project_file_or_folder.mock_calls == expected_symlink_calls
-    commands.update_statics_and_assets.assert_called_with(
-        force=True, flask_env="production"
-    )
+    commands.update_statics_and_assets.assert_called_with(force=True, debug=False)
 
 
 @pytest.mark.skip()
@@ -285,7 +283,7 @@ def test_run(
     commands.run(host=host, port=port, debug=True)
 
     run_env = environ.copy()
-    run_env["FLASK_ENV"] = "development"
+    run_env["FLASK_DEBUG"] = "1"
     run_env["INVENIO_SITE_HOSTNAME"] = f"{host}:{port}"
     expected_calls = [
         call(["pipenv", "run", "celery", "--app", "invenio_app.celery", "worker"]),
@@ -303,6 +301,8 @@ def test_run(
                 "127.0.0.1",
                 "--port",
                 "5000",
+                "--extra-files",
+                "invenio.cfg",
             ],
             env=run_env,
         ),
@@ -314,7 +314,6 @@ def test_run(
 @pytest.mark.skip()
 @patch("pynpm.package.run_npm")
 def test_link_js_module(p_run_npm, testpkg, mock_cli_config):
-
     LocalCommands(mock_cli_config).link_js_module(testpkg)
 
     expected_calls = [
@@ -328,7 +327,6 @@ def test_link_js_module(p_run_npm, testpkg, mock_cli_config):
 @pytest.mark.skip()
 @patch("pynpm.package.run_npm")
 def test_watch_js_module(p_run_npm, testpkg, mock_cli_config):
-
     LocalCommands(mock_cli_config).watch_js_module(testpkg, link=False)
 
     expected_calls = [
@@ -340,7 +338,6 @@ def test_watch_js_module(p_run_npm, testpkg, mock_cli_config):
 @pytest.mark.skip()
 @patch("pynpm.package.run_npm")
 def test_watch_js_module_w_build(p_run_npm, testpkg, mock_cli_config):
-
     LocalCommands(mock_cli_config).watch_js_module(testpkg, link=True)
 
     expected_calls = [

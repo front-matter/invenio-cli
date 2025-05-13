@@ -2,17 +2,20 @@
 #
 # Copyright (C) 2020-2021 CERN.
 # Copyright (C) 2021 TU Wien.
+# Copyright (C) 2023 ULB Münster.
 #
 # Invenio-Cli is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 
 """Invenio module to ease the creation and management of applications."""
 
+import json
 import re
 import sys
-from os import listdir
 
-from ..helpers.process import ProcessResponse, run_cmd, run_interactive
+from ..helpers.docker_helper import DockerHelper
+from ..helpers.process import ProcessResponse, run_cmd
+from ..helpers.versions import rdm_version
 from .steps import FunctionStep
 
 
@@ -32,8 +35,7 @@ class RequirementsCommands(object):
 
         if len(parts) != 3:
             return ProcessResponse(
-                error=f"{binary} incorrect version format or not found. "
-                "Check that it is installed correctly",
+                error=f"{binary} incorrect version format or not found. Check that it is installed correctly",  # noqa
                 status_code=1,
             )
 
@@ -109,11 +111,11 @@ class RequirementsCommands(object):
     @classmethod
     def check_docker_version(cls, major, minor=-1, patch=-1, exact=False):
         """Check the docker version."""
-        # Output comes in the form of
-        # 'Docker version 19.03.13, build 4484c46d9d\n'
+        # Use JSON Formatted output and parse it
         try:
-            result = run_cmd(["docker", "--version"])
-            version = cls._version_from_string(result.output.strip())
+            result = run_cmd(["docker", "version", "--format", "json"])
+            result_json = json.loads(result.output.strip())
+            version = cls._version_from_string(result_json["Client"]["Version"])
             return cls._check_version("Docker", version, major, minor, patch, exact)
         except Exception as err:
             return ProcessResponse(error=f"Docker not found. Got {err}.", status_code=1)
@@ -122,9 +124,10 @@ class RequirementsCommands(object):
     def check_docker_compose_version(cls, major, minor=-1, patch=-1, exact=False):
         """Check the docker compose version."""
         # Output comes in the form of
-        # 'docker-compose version 1.27.4, build 4484c46d9d\n'
+        # 'Docker Compose version v2.17.3\n'
+        docker_helper = DockerHelper("", local=False)
         try:
-            result = run_cmd(["docker-compose", "--version"])
+            result = run_cmd(docker_helper.docker_compose + ["version"])
             version = cls._version_from_string(result.output.strip())
             return cls._check_version(
                 "Docker Compose", version, major, minor, patch, exact
@@ -183,7 +186,7 @@ class RequirementsCommands(object):
             return ProcessResponse(
                 output=f"Pipenv OK. Got version {version}.", status_code=0
             )
-        except Exception as err:
+        except Exception:
             return ProcessResponse(
                 error=f"Pipenv not found. Got {result.error}.", status_code=1
             )
@@ -191,15 +194,26 @@ class RequirementsCommands(object):
     @classmethod
     def check_dev(cls):
         """Steps to check the development pre-requisites."""
+        if rdm_version()[0] >= 12:
+            node_version = 18
+            npm_version = 10
+        elif rdm_version()[0] >= 11:
+            node_version = 16
+            npm_version = 7
+        else:
+            # for backwards compatibility with v9 (LTS)
+            node_version = 14
+            npm_version = 6
+
         steps = [
             FunctionStep(
                 func=cls.check_node_version,
-                args={"major": 18, "exact": True},
+                args={"major": node_version},
                 message="Checking Node version...",
             ),
             FunctionStep(
                 func=cls.check_npm_version,
-                args={"major": 8, "exact": True},
+                args={"major": npm_version},
                 message="Checking NPM version...",
             ),
             FunctionStep(
@@ -222,7 +236,7 @@ class RequirementsCommands(object):
         steps = [
             FunctionStep(
                 func=cls.check_python_version,
-                args={"major": 3, "minor": 6},
+                args={"major": 3, "minor": 9},
                 message="Checking Python version...",
             ),
             FunctionStep(

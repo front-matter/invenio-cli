@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2019-2020 CERN.
+# Copyright (C) 2019-2024 CERN.
 # Copyright (C) 2019-2020 Northwestern University.
 # Copyright (C) 2021 Esteban J. G. Gabancho.
+# Copyright (C) 2024 Graz University of Technology.
 #
 # Invenio-Cli is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
@@ -10,10 +11,19 @@
 """Invenio-cli configuration file."""
 
 from configparser import ConfigParser
+from functools import cached_property
 from pathlib import Path
 
 from ..errors import InvenioCLIConfigError
 from .filesystem import get_created_files
+from .package_managers import (
+    NPM,
+    PNPM,
+    UV,
+    JavascriptPackageManager,
+    Pipenv,
+    PythonPackageManager,
+)
 from .process import ProcessResponse
 
 
@@ -38,9 +48,10 @@ class CLIConfig(object):
 
         :param config_dir: Path to general cli config file.
         """
-        self.config_path = Path(project_dir) / self.CONFIG_FILENAME
+        self.project_path = Path(project_dir)
+        self.config_path = self.project_path / self.CONFIG_FILENAME
         self.config = ConfigParser()
-        self.private_config_path = Path(project_dir) / self.PRIVATE_CONFIG_FILENAME
+        self.private_config_path = self.project_path / self.PRIVATE_CONFIG_FILENAME
         self.private_config = ConfigParser()
 
         try:
@@ -48,23 +59,53 @@ class CLIConfig(object):
                 self.config.read_file(cfg_file)
         except FileNotFoundError as e:
             raise InvenioCLIConfigError(
-                "Missing '{0}' file in current directory. "
-                "Are you in the project folder?".format(e.filename),
+                f"Missing '{e.filename}' file in current directory. Are you in the project folder?",  # noqa
             )
 
         try:
             with open(self.private_config_path) as cfg_file:
                 self.private_config.read_file(cfg_file)
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             CLIConfig._write_private_config(Path(project_dir))
             with open(self.private_config_path) as cfg_file:
                 self.private_config.read_file(cfg_file)
+
+    @cached_property
+    def python_package_manager(self) -> PythonPackageManager:
+        """Get python packages manager."""
+        manager_name = self.config[CLIConfig.CLI_SECTION].get("python_package_manager")
+        if manager_name == Pipenv.name:
+            return Pipenv()
+        elif manager_name == UV.name:
+            return UV()
+
+        if (self.project_path / "Pipfile").is_file():
+            return Pipenv()
+        elif (self.project_path / "pyproject.toml").is_file():
+            return UV()
+        else:
+            raise RuntimeError(
+                "Could not determine the Python package manager, please configure it."
+            )
+
+    @cached_property
+    def javascript_package_manager(self) -> JavascriptPackageManager:
+        """Get javascript packages manager."""
+        manager_name = self.config[CLIConfig.CLI_SECTION].get(
+            "javascript_package_manager"
+        )
+        if manager_name == NPM.name:
+            return NPM()
+        elif manager_name == PNPM.name:
+            return PNPM()
+
+        return NPM()
 
     def get_project_dir(self):
         """Returns path to project directory."""
         return self.config_path.parent.resolve()
 
-    def get_instance_path(self):
+    def get_instance_path(self, throw=True):
         """Returns path to application instance directory.
 
         If not set yet, raises an InvenioCLIConfigError.
@@ -72,7 +113,7 @@ class CLIConfig(object):
         path = self.private_config[CLIConfig.CLI_SECTION].get("instance_path")
         if path:
             return Path(path)
-        else:
+        elif throw:
             raise InvenioCLIConfigError("Accessing unset 'instance_path'")
 
     def update_instance_path(self, new_instance_path):
@@ -109,6 +150,25 @@ class CLIConfig(object):
         """Returns the project's shortname."""
         return self.config[CLIConfig.COOKIECUTTER_SECTION]["project_shortname"]
 
+    def get_search_port(self):
+        """Returns the search port."""
+        return self.private_config[CLIConfig.CLI_SECTION].get("search_port", "9200")
+
+    def get_search_host(self):
+        """Returns the search host."""
+        return self.private_config[CLIConfig.CLI_SECTION].get(
+            "search_host",
+            "localhost",
+        )
+
+    def get_web_port(self):
+        """Returns web port."""
+        return self.private_config[CLIConfig.CLI_SECTION].get("web_port", "5000")
+
+    def get_web_host(self):
+        """Returns web host."""
+        return self.private_config[CLIConfig.CLI_SECTION].get("web_host", "127.0.0.1")
+
     def get_db_type(self):
         """Returns the database type (mysql, postgresql)."""
         return self.config[CLIConfig.COOKIECUTTER_SECTION]["database"]
@@ -131,6 +191,14 @@ class CLIConfig(object):
     def get_file_storage(self):
         """Returns the file storage (local, s3, etc.)."""
         return self.config[CLIConfig.COOKIECUTTER_SECTION]["file_storage"]
+
+    def get_author_email(self):
+        """Returns the email of the author/owner of the project."""
+        return self.config[CLIConfig.COOKIECUTTER_SECTION]["author_email"]
+
+    def get_author_name(self):
+        """Returns the name of the author/owner of the project."""
+        return self.config[CLIConfig.COOKIECUTTER_SECTION]["author_name"]
 
     @classmethod
     def _write_private_config(cls, project_dir):
